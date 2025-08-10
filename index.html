@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>محلات أيمن أبو الشوارب)</title>
+<title>محلات أيمن أبو الشوارب — مزامنة Google Sheets</title>
 <style>
 :root{ --bg:#f7f7fb; --card:#fff; --txt:#111; --muted:#6b7280; --line:#e5e7eb; --pri:#2563eb; --ok:#16a34a; --warn:#b45309; }
 *{ box-sizing:border-box; }
 body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto Kufi Arabic', Tahoma, Arial; background:var(--bg); color:var(--txt) }
 .topbar{ position:sticky; top:0; background:#fff; border-bottom:1px solid var(--line); padding:.6rem .9rem; display:flex; align-items:center; justify-content:space-between; z-index:10 }
 .brand{ font-weight:800 }
-.actions{ display:flex; gap:.5rem; align-items:center }
+actions{ display:flex; gap:.5rem; align-items:center }
 .container{ padding:1rem }
 .grid{ display:grid; gap:1rem; grid-template-columns: 1fr; }
 @media(min-width:1000px){ .grid{ grid-template-columns: 340px 1fr; } }
@@ -59,7 +59,7 @@ body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto K
 </head>
 <body>
 <nav class="topbar">
-  <div class="brand">محلات أيمن أبو الشوارب — نسخة محلية (ملف واحد)</div>
+  <div class="brand">محلات أيمن أبو الشوارب — نسخة سحابية (Google Sheets)</div>
   <div class="actions">
     <button id="btnExport" class="btn ghost">تصدير النسخة الاحتياطية</button>
     <label class="btn ghost filelabel">استيراد<input id="importFile" type="file" accept=".json" hidden></label>
@@ -156,7 +156,7 @@ body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto K
   </section>
 </main>
 
-<!-- Modals (Supplier / Invoice / Payment / Calendar / Global report) -->
+<!-- Modals -->
 <div class="modal" id="mSupplier"><div class="modal-box"><h3>مورد جديد/تعديل</h3>
 <form id="fSup">
   <input type="hidden" id="sid">
@@ -219,17 +219,32 @@ body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Noto K
 </div></div>
 
 <script>
-// ===== JS (inline) — Local Storage app =====
-const LS_KEY = 'ayman_local_v1';
+// ===== Google Sheets Sync Layer =====
+const API = 'https://script.google.com/macros/s/AKfycbxIVLQQURlHRyWfQbw3kcSFP8ytetKDETDO-kh2qirW83OrnBmqAe0JDma2k4AjjQr-5g/exec'; // Web App URL
+let lastFetched = 0;
+
+// الحالة العامة
+let state = { suppliers: [], invoices: [], payments: [], week: {sat:[],sun:[],mon:[],tue:[],wed:[],thu:[],fri:[]} };
+
+async function load(){
+  try{
+    const r = await fetch(API + '?op=all', {cache:'no-store'});
+    const d = await r.json();
+    if (d && d.state) state = d.state;
+    lastFetched = new Date(d.updatedAt || Date.now()).getTime();
+  }catch(e){ console.log('load error', e); }
+}
+async function save(){
+  try{
+    await fetch(API + '?op=save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({state}) });
+  }catch(e){ console.log('save error', e); }
+}
+
+// ===== Helpers / Rendering (نفس منطقك الأصلي) =====
 const $ = (s, root=document)=> root.querySelector(s);
 const $$ = (s, root=document)=> [...root.querySelectorAll(s)];
 const today = () => new Date().toISOString().slice(0,10);
 const fmt = n => Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:2});
-
-let state = { suppliers: [], invoices: [], payments: [], week: {sat:[],sun:[],mon:[],tue:[],wed:[],thu:[],fri:[]} };
-
-function load(){ try{ state = JSON.parse(localStorage.getItem(LS_KEY)) || state; } catch{} }
-function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
 const byId = (a,id) => a.find(x=>x.id===id);
 const nextId = (a) => a.length? Math.max(...a.map(x=>x.id))+1 : 1;
@@ -356,6 +371,9 @@ function renderPaymentsByDate(){
 }
 function rerender(){
   refreshSupplierSelects();
+  if ($('#selSupplier').value === "" && state.suppliers[0]) {
+    $('#selSupplier').value = String(state.suppliers[0].id);
+  }
   renderSummary();
   renderSuppliers();
   renderInvoices();
@@ -365,39 +383,40 @@ function rerender(){
   renderPaymentsByDate();
 }
 
-// CRUD + expose
+// ===== CRUD (تكتب للشيت عبر الويب آب) =====
 function addOrUpdateSupplier(s){
   const i = state.suppliers.findIndex(x=>x.id===s.id);
   if(i>-1) state.suppliers[i]=s; else state.suppliers.push(s);
-  save(); rerender();
+  save().then(rerender);
 }
 function deleteSupplier(id){
   state.suppliers = state.suppliers.filter(x=>x.id!==id);
   state.invoices = state.invoices.filter(x=>x.supplierId!==id);
   state.payments = state.payments.filter(x=>x.supplierId!==id);
   Object.keys(state.week).forEach(k=> state.week[k] = (state.week[k]||[]).filter(v=>v!==id));
-  save(); rerender();
+  save().then(rerender);
 }
 function addOrUpdateInvoice(it){
   const i = state.invoices.findIndex(x=>x.id===it.id);
   if(i>-1) state.invoices[i]=it; else state.invoices.push(it);
-  save(); rerender();
+  save().then(rerender);
 }
 function deleteInvoice(id){
   state.invoices = state.invoices.filter(x=>x.id!==id);
-  save(); rerender();
+  save().then(rerender);
 }
 function addOrUpdatePayment(it){
   const i = state.payments.findIndex(x=>x.id===it.id);
   if(i>-1) state.payments[i]=it; else state.payments.push(it);
-  save(); rerender();
+  save().then(rerender);
 }
 function deletePayment(id){
   state.payments = state.payments.filter(x=>x.id!==id);
-  save(); rerender();
+  save().then(rerender);
 }
-function saveWeek(w){ state.week = w; save(); rerender(); }
+function saveWeek(w){ state.week = w; save().then(rerender); }
 
+// expose
 window.editSup = (id)=>{
   const s = byId(state.suppliers,id);
   if(!s) return;
@@ -477,6 +496,7 @@ document.getElementById('btnGlobalReport').addEventListener('click', ()=> { rend
 document.getElementById('filterDate').addEventListener('change', renderPaymentsByDate);
 document.getElementById('supSearch').addEventListener('input', renderSuppliers);
 
+// تصدير/استيراد (يستخدم نفس state)
 document.getElementById('btnExport').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
   const a = document.createElement('a');
@@ -485,15 +505,12 @@ document.getElementById('btnExport').addEventListener('click', ()=>{
   a.click();
   URL.revokeObjectURL(a.href);
 });
-document.getElementById('importFile').addEventListener('change', (e)=>{
-  const f = e.target.files?.[0];
-  if(!f) return;
-  const r = new FileReader();
-  r.onload = ()=>{
-    try{ const data = JSON.parse(r.result); if(data?.suppliers && data?.invoices && data?.payments){ state = data; save(); rerender(); alert('تم الاستيراد بنجاح.'); } else { alert('ملف غير صالح'); } }
-    catch{ alert('تعذر قراءة الملف'); }
-  };
-  r.readAsText(f);
+
+document.getElementById('importFile').addEventListener('change', async (e)=>{
+  const f = e.target.files?.[0]; if(!f) return;
+  const txt = await f.text();
+  try{ const data = JSON.parse(txt); if(data?.suppliers && data?.invoices && data?.payments){ state = data; await save(); rerender(); alert('تم الاستيراد بنجاح.'); } else { alert('ملف غير صالح'); } }
+  catch{ alert('تعذر قراءة الملف'); }
 });
 
 function renderGlobalReport(){
@@ -510,7 +527,20 @@ function renderGlobalReport(){
   }).join('');
 }
 
-function init(){ load(); initTabs(); rerender(); }
+async function init(){
+  await load();
+  initTabs();
+  rerender();
+  // مزامنة كل 3 ثواني
+  setInterval(async ()=>{
+    try{
+      const r = await fetch(API + '?op=all', {cache:'no-store'});
+      const d = await r.json();
+      const ts = new Date(d.updatedAt || 0).getTime();
+      if (ts > lastFetched) { state = d.state || state; rerender(); lastFetched = ts; }
+    }catch{}
+  }, 3000);
+}
 init();
 </script>
 </body>
