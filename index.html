@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>محلات أيمن أبو الشوارب —   </title>
+<title>محلات أيمن أبو الشوارب — مزامنة Google Sheets</title>
 <style>
 :root{ --bg:#f7f7fb; --card:#fff; --txt:#111; --muted:#6b7280; --line:#e5e7eb; --pri:#2563eb; --ok:#16a34a; --warn:#b45309; }
 *{ box-sizing:border-box; }
@@ -236,7 +236,15 @@ async function load(){
 }
 async function save(){
   try{
-    await fetch(API + '?op=save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({state}) });
+    await fetch(API + '?op=save', {
+      method: 'POST',
+      // مهم: لا تضع أي headers
+      body: JSON.stringify({ state })
+    });
+  }catch(e){
+    console.error('save error', e);
+  }
+}, body: JSON.stringify({state}) });
   }catch(e){ console.log('save error', e); }
 }
 
@@ -384,37 +392,37 @@ function rerender(){
 }
 
 // ===== CRUD (تكتب للشيت عبر الويب آب) =====
-function addOrUpdateSupplier(s){
+async function addOrUpdateSupplier(s){
   const i = state.suppliers.findIndex(x=>x.id===s.id);
   if(i>-1) state.suppliers[i]=s; else state.suppliers.push(s);
-  save().then(rerender);
+  await save(); rerender();
 }
-function deleteSupplier(id){
+async function deleteSupplier(id){
   state.suppliers = state.suppliers.filter(x=>x.id!==id);
-  state.invoices = state.invoices.filter(x=>x.supplierId!==id);
-  state.payments = state.payments.filter(x=>x.supplierId!==id);
+  state.invoices  = state.invoices.filter(x=>x.supplierId!==id);
+  state.payments  = state.payments.filter(x=>x.supplierId!==id);
   Object.keys(state.week).forEach(k=> state.week[k] = (state.week[k]||[]).filter(v=>v!==id));
-  save().then(rerender);
+  await save(); rerender();
 }
-function addOrUpdateInvoice(it){
+async function addOrUpdateInvoice(it){
   const i = state.invoices.findIndex(x=>x.id===it.id);
   if(i>-1) state.invoices[i]=it; else state.invoices.push(it);
-  save().then(rerender);
+  await save(); rerender();
 }
-function deleteInvoice(id){
+async function deleteInvoice(id){
   state.invoices = state.invoices.filter(x=>x.id!==id);
-  save().then(rerender);
+  await save(); rerender();
 }
-function addOrUpdatePayment(it){
+async function addOrUpdatePayment(it){
   const i = state.payments.findIndex(x=>x.id===it.id);
   if(i>-1) state.payments[i]=it; else state.payments.push(it);
-  save().then(rerender);
+  await save(); rerender();
 }
-function deletePayment(id){
+async function deletePayment(id){
   state.payments = state.payments.filter(x=>x.id!==id);
-  save().then(rerender);
+  await save(); rerender();
 }
-function saveWeek(w){ state.week = w; save().then(rerender); }
+async function saveWeek(w){ state.week = w; await save(); rerender(); }
 
 // expose
 window.editSup = (id)=>{
